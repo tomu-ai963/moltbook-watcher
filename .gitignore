@@ -1,0 +1,5 @@
+state.json
+trend_log.jsonl
+safe.log
+__pycache__/
+*.pyc
