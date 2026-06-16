@@ -72,6 +72,7 @@
   <div class="posts-panel">
     <div class="panel-title">新着投稿</div>
     <div id="posts-list"><div class="empty">Startを押すと取得を開始します</div></div>
+    <button class="btn-clear" id="more-btn" style="display:none;width:100%;margin-top:8px;" onclick="loadMore()">もっと見る</button>
   </div>
   <div class="log-panel">
     <div class="panel-title">ログ</div>
@@ -79,8 +80,32 @@
   </div>
 </div>
 <script>
-let pC=0,lC=0;
-async function ctrl(a){await fetch('/api/'+a,{method:'POST'});}
+let lC=0;
+const LIMIT=20;
+let page=1, lastTopId=null, loadingMore=false;
+
+async function ctrl(a){
+  await fetch('/api/'+a,{method:'POST'});
+  if(a==='clear'){document.getElementById('log-list').innerHTML='';lC=0;}
+}
+
+function postCard(p){
+  const imp=p.importance??0;
+  return`<div class="post-card ${p.flagged?'flagged':''}">
+    <div class="post-title">${p.title}</div>
+    <div class="post-meta">${p.flagged?'<span class="flag-badge">🔔 重要</span>':''}${p.category?`<span>${p.category}</span>`:''}<span>${p.ts}</span></div>
+    ${p.importance!==null?`<div class="importance-bar"><div class="importance-fill" style="width:${imp}%"></div></div>`:''}
+    ${p.summary_ja?`<div class="summary">${p.summary_ja}</div>`:''}
+    ${(p.keywords||[]).length?`<div class="kw-list">${p.keywords.map(k=>`<span class="kw">${k}</span>`).join('')}</div>`:''}
+    <a class="post-link" href="${p.url}" target="_blank">→ 記事を開く</a>
+  </div>`;
+}
+
+function setMoreBtn(hasMore){
+  document.getElementById('more-btn').style.display=hasMore?'':'none';
+}
+
+// Live status/stats/logs/trend — no longer carries posts.
 async function poll(){
   try{
     const d=await(await fetch('/api/state')).json();
@@ -92,21 +117,6 @@ async function poll(){
     if(d.trend.length){
       document.getElementById('trend-bar').innerHTML='<span class="trend-lbl">24h TREND:</span>'+
         d.trend.map(t=>`<span class="badge">${t.word} <b>${t.count}</b></span>`).join('');
-    }
-    if(d.posts.length!==pC){
-      pC=d.posts.length;
-      const el=document.getElementById('posts-list');
-      el.innerHTML=d.posts.length?d.posts.map(p=>{
-        const imp=p.importance??0;
-        return`<div class="post-card ${p.flagged?'flagged':''}">
-          <div class="post-title">${p.title}</div>
-          <div class="post-meta">${p.flagged?'<span class="flag-badge">🔔 重要</span>':''}${p.category?`<span>${p.category}</span>`:''}<span>${p.ts}</span></div>
-          ${p.importance!==null?`<div class="importance-bar"><div class="importance-fill" style="width:${imp}%"></div></div>`:''}
-          ${p.summary_ja?`<div class="summary">${p.summary_ja}</div>`:''}
-          ${(p.keywords||[]).length?`<div class="kw-list">${p.keywords.map(k=>`<span class="kw">${k}</span>`).join('')}</div>`:''}
-          <a class="post-link" href="${p.url}" target="_blank">→ 記事を開く</a>
-        </div>`;
-      }).join(''):'<div class="empty">まだ投稿はありません</div>';
     }
     if(d.logs.length!==lC){
       const el=document.getElementById('log-list');
@@ -120,7 +130,39 @@ async function poll(){
     }
   }catch(e){console.error(e);}
 }
+
+// Re-render the post list only when the newest post id changes.
+async function refreshPosts(){
+  try{
+    const d=await(await fetch(`/api/posts?page=1&limit=${LIMIT}`)).json();
+    const topId=d.posts.length?d.posts[0].id:null;
+    if(topId===lastTopId) return;   // 変化なし → 再描画しない
+    lastTopId=topId;
+    page=1;
+    const el=document.getElementById('posts-list');
+    el.innerHTML=d.posts.length?d.posts.map(postCard).join(''):'<div class="empty">まだ投稿はありません</div>';
+    setMoreBtn(d.has_more);
+  }catch(e){console.error(e);}
+}
+
+// 「もっと見る」: 次ページを取得して末尾に追加。
+async function loadMore(){
+  if(loadingMore) return;
+  loadingMore=true;
+  try{
+    const next=page+1;
+    const d=await(await fetch(`/api/posts?page=${next}&limit=${LIMIT}`)).json();
+    if(d.posts.length){
+      page=next;
+      document.getElementById('posts-list').insertAdjacentHTML('beforeend',d.posts.map(postCard).join(''));
+    }
+    setMoreBtn(d.has_more);
+  }catch(e){console.error(e);}
+  finally{loadingMore=false;}
+}
+
 setInterval(poll,2000);poll();
+setInterval(refreshPosts,2000);refreshPosts();
 </script>
 </body>
 </html>

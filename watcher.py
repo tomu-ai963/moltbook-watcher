@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import json, os, re, time, threading
+import json, os, re, time, threading, logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from typing import Any, Dict, List
 import requests
@@ -8,6 +9,20 @@ from dotenv import load_dotenv
 
 # Load environment variables from a .env file (if present) before any os.getenv call.
 load_dotenv()
+
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+logger = logging.getLogger("moltbook")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _fh = RotatingFileHandler(os.path.join(LOG_DIR, "watcher.log"),
+                              maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    logger.addHandler(_fh)
+
+# Map the UI's log levels onto stdlib logging methods.
+_LOG_LEVEL_MAP = {"info": "info", "success": "info", "warn": "warning",
+                  "alert": "warning", "error": "error"}
 
 MOLTBOOK_API = "https://www.moltbook.com/api/v1/posts"
 SORT, LIMIT, INTERVAL = "new", 20, 60
@@ -36,6 +51,7 @@ def add_log(msg, level="info"):
     with _lock:
         shared["logs"].append({"ts": ts, "msg": msg, "level": level})
         shared["logs"] = shared["logs"][-100:]
+    getattr(logger, _LOG_LEVEL_MAP.get(level, "info"))(msg)
 
 def redact_text(s):
     s = str(s or "")
