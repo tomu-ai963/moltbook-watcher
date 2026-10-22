@@ -140,7 +140,7 @@ def watcher_loop():
             resp = requests.get(MOLTBOOK_API, params={"sort": SORT, "limit": LIMIT}, timeout=20)
             resp.raise_for_status()
             data = resp.json()
-            posts = data if isinstance(data, list) else data.get("data", [])
+            posts = data if isinstance(data, list) else (data.get("posts") or data.get("data") or [])
             add_log(f"📡 Fetched {len(posts)} posts")
             new_count = 0
             for post in posts:
